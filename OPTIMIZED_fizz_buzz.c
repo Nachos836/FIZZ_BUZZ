@@ -11,8 +11,6 @@
 
 typedef size_t __attribute__((__aligned__(1),__may_alias__))	t_a_size_t;
 
-extern void		*valloc(size_t);
-extern void		free(void*);
 extern size_t	write(int, void*, size_t);
 
 #if defined(__GNUC__) && defined(__clang__)
