@@ -3,11 +3,30 @@
 # define size_t __SIZE_TYPE__
 #endif
 
+#ifndef LIMIT
+# define LIMIT (100000000UL)
+#endif
+
+#define prefetch(a, sel) (__builtin_prefetch((const void *)(a), ((sel) >> 2) & 1, (sel) & 0x3))
+
 typedef size_t __attribute__((__aligned__(1),__may_alias__))	t_a_size_t;
 
 extern void		*valloc(size_t);
 extern void		free(void*);
 extern size_t	write(int, void*, size_t);
+
+#if defined(__GNUC__) && defined(__clang__)
+__attribute__((__const__,__aligned__(64),__cold__))
+#elif defined(__GNUC__) && !defined(__clang__)
+__attribute__((__const__,__aligned__(64),__cold__,__optimize__("Ofast")))
+#endif
+static void *const
+buff_init(void)
+{
+	static size_t buff[LIMIT * 2];
+
+	return (buff);
+}
 
 #if defined(__GNUC__) && defined(__clang__)
 __attribute__((__unused__,__const__,__aligned__(64),__hot__))
@@ -73,11 +92,13 @@ static size_t	str_int(register const size_t val)
 }
 
 #if defined(__GNUC__) && defined(__clang__)
-__attribute__((__alloc_size__(1),__unused__,__aligned__(64),__hot__))
+__attribute__((__unused__,__aligned__(64),__hot__))
 #elif defined(__GNUC__) && !defined(__clang__)
-__attribute__((__alloc_size__(1),__unused__,__aligned__(64),__optimize__("O0")))
+__attribute__((__unused__,__aligned__(64),__optimize__("O0")))
 #endif
-static void		*__string_table(register const size_t limit)
+static void		__string_table(
+       register const size_t limit,
+       register void *const buff)
 {
 	register const volatile size_t	fizz		= (*((const t_a_size_t*)"fizz\0\0\0\0"));
 	register const volatile size_t	buzz		= (*((const t_a_size_t*)"buzz\0\0\0\0"));
@@ -88,16 +109,15 @@ static void		*__string_table(register const size_t limit)
     register size_t					i_mod5;
     register size_t					i_mod15;
 	register size_t					index;
-	register size_t *__restrict__	table;
+	register size_t *const __restrict__	table = buff;
 
-	if (!(table = (__typeof__(table))valloc(limit * sizeof(*table) * 2)))
-		return ((void*)0);
 	i = 1;
     i_mod15 = 15UL;
     i_mod5 = 5UL;
     i_mod3 = 3UL;
 	index = 0;
-	__builtin_prefetch(table, 1, 1);
+
+	prefetch(table, 1);
 	while (i != limit)
 	{
 		if (i == i_mod15)
@@ -118,13 +138,14 @@ static void		*__string_table(register const size_t limit)
 			i_mod3 += 3UL;
 		}
 		else
+		{
 			*((size_t*)table + index) = str_int(i);
+		}
 		index++;
 		*((size_t*)table + index) = newline;
 		index++;
 		i++;
 	}
-	return (table);
 }
 
 #if defined(__GNUC__) && defined(__clang__)
@@ -134,14 +155,9 @@ __attribute__((__aligned__(64),__cold__,__optimize__("Ofast")))
 #endif
 int		main(void)
 {
-	register const volatile size_t	limit = 100000000UL;
-	register void					*fizz_buzz_buff;
+	static size_t						table[LIMIT * 2];
+	register const volatile size_t		limit = sizeof(table) / sizeof *table / 2ul;
 
-	if (!(fizz_buzz_buff = __string_table(limit)))
-		return (-1);
-	else
-	{
-		write(1, fizz_buzz_buff, limit * 8 * 2);
-		free(fizz_buzz_buff);
-	}
+	__string_table(limit, table);
+	write(1, table, sizeof(table));
 }
